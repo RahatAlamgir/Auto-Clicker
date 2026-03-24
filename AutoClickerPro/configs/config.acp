@@ -1,0 +1,12 @@
+# --- Recorded at 15:34:16 ---
+wait 2s
+move 1551 510
+
+click right
+
+wait 1s
+move 1615 599
+
+click left
+
+loop -1

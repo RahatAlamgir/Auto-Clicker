@@ -1,0 +1,32 @@
+# --- Recorded at 16:53:43 ---
+
+move 190 274
+press mouse left
+wait 47
+end mouse left
+wait 93
+move 190 274
+dclick left
+wait 1887
+move 498 206
+press mouse left
+wait 80
+end mouse left
+wait 69
+move 498 206
+dclick left
+wait 1746
+move 505 16
+press mouse left
+wait 88
+end mouse left
+wait 975
+move 1804 0
+press mouse left
+wait 112
+end mouse left
+wait 910
+move 1887 15
+press mouse left
+wait 97
+end mouse left

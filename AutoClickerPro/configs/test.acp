@@ -1,0 +1,14 @@
+pRess mouse right
+WAIT 100
+end Mouse right
+
+wait 2000
+
+press mouse left
+wait 100
+end mouse left
+
+move 500 300
+
+wait 4400
+loop -1

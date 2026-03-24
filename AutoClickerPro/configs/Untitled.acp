@@ -1,0 +1,58 @@
+# --- Recorded at 17:05:37 ---
+wait 2348
+move 195 282
+
+press mouse left
+wait 106
+end mouse left
+
+wait 70
+move 195 282
+dclick left
+wait 2175
+move 483 245
+
+press mouse left
+wait 176
+end mouse left
+
+wait 1257
+
+press ctrl_l
+wait 454
+
+tap c
+
+wait 96
+end ctrl_l
+
+wait 991
+move 1800 16
+
+press mouse left
+wait 138
+end mouse left
+
+wait 789
+move 390 498
+
+press mouse left
+wait 122
+end mouse left
+
+wait 325
+
+press ctrl_l
+wait 480
+
+tap v
+
+wait 41
+end ctrl_l
+
+wait 774
+move 390 498
+
+press mouse left
+wait 128
+end mouse left

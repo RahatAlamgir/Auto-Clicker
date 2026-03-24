@@ -1,6 +1,0 @@
-press mouse right
-wait 100
-end mouse right
-
-wait 4400
-loop -1
