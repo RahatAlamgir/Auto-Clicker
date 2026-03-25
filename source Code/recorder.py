@@ -5,6 +5,7 @@ import time
 # ---------- STATE ----------
 recording = False
 recorded_commands = []
+
 last_event_time = 0
 is_mouse_dragging = False
 last_click_time = 0
@@ -16,6 +17,29 @@ insert_to_editor = None
 update_status = None
 save_script = None
 
+# ------- hotkey --------
+
+pressed_keys = set()
+
+modifier_map = {
+    "ctrl_l": "ctrl", 
+    "ctrl_r": "ctrl",
+
+    "shift_l": "shift", 
+    "shift_r": "shift",
+
+    "alt_l": "alt", 
+    "alt_r": "alt",
+    "alt_gr": "alt",
+
+    "cmd": "win"
+    
+}
+
+active_modifiers = set()
+recent_hotkey_keys = set()
+modifier_pressed_time = {}
+modifier_used_in_combo = {}
 
 # ---------- SET UI CALLBACKS ----------
 
@@ -50,9 +74,29 @@ def add_recorded_cmd(cmd):
     last_event_time = now
 
 
+
+def normalize_key(k):
+    if not k:
+        return None
+
+    # Convert control characters (Ctrl+C etc.)
+    if len(k) == 1 and ord(k) < 32:
+        return chr(ord(k) + 96)
+
+    k = k.lower()
+
+    # Normalize modifiers
+    if k in modifier_map:
+        return modifier_map[k]
+
+    return k
 # ---------- KEYBOARD ----------
+
+
 def on_rec_press(key):
-    global recording
+    global recording, pressed_keys, active_modifiers
+    global modifier_pressed_time, modifier_used_in_combo
+
     if not recording:
         return
 
@@ -61,14 +105,46 @@ def on_rec_press(key):
     except AttributeError:
         k = str(key).replace("Key.", "")
 
-    if k.lower() in ['f6', 'f7']:
+    k = normalize_key(k)
+
+    if not k or k in ['f6', 'f7']:
         return
 
+    # Prevent spam
+    if k in pressed_keys:
+        return
+
+    pressed_keys.add(k)
+
+    # -------- MODIFIER PRESSED --------
+    if k in ["ctrl", "shift", "alt","win"]:
+        active_modifiers.add(k)
+        modifier_pressed_time[k] = time.time()
+        #modifier_used_in_combo[k] = False
+        return
+
+    # -------- COMBO DETECT --------
+    if active_modifiers:
+        mods = list(active_modifiers)
+        combo_keys = mods + [k]
+
+        add_recorded_cmd(f"hotkey {' '.join(combo_keys)}")
+
+        # Mark only THESE keys as part of hotkey
+        recent_hotkey_keys.update(combo_keys)
+
+        for m in mods:
+            modifier_used_in_combo[m] = True
+
+        return
+
+    # -------- NORMAL KEY --------
     add_recorded_cmd(f"press {k}")
 
-
 def on_rec_release(key):
-    global recording
+    global recording, pressed_keys, active_modifiers
+    global modifier_pressed_time, modifier_used_in_combo
+
     if not recording:
         return
 
@@ -77,9 +153,35 @@ def on_rec_release(key):
     except AttributeError:
         k = str(key).replace("Key.", "")
 
-    if k.lower() in ['f6', 'f7']:
+    k = normalize_key(k)
+
+    if not k or k in ['f6', 'f7']:
         return
-    
+
+    if k in pressed_keys:
+        pressed_keys.remove(k)
+
+    # -------- MODIFIER RELEASE --------
+    if k in ["ctrl", "shift", "alt","win"]:
+        if k in active_modifiers:
+            active_modifiers.remove(k)
+
+        # If NOT used in combo → treat as real press
+        if not modifier_used_in_combo.get(k, False):
+            duration = int((time.time() - modifier_pressed_time.get(k, time.time())) * 1000)
+
+            add_recorded_cmd(f"press {k}")
+            if duration > 20:
+                add_recorded_cmd(f"wait {duration}")
+            add_recorded_cmd(f"end {k}")
+
+        return
+
+    # -------- SKIP ONLY HOTKEY KEYS --------
+    if k in recent_hotkey_keys:
+        recent_hotkey_keys.discard(k)
+        return
+
     add_recorded_cmd(f"end {k}")
 
 
@@ -147,7 +249,7 @@ def toggle_record():
 
         if insert_to_editor:
             insert_to_editor(
-                f"\n# --- Recorded at {time.strftime('%H:%M:%S')} ---\n"
+                f"\n// --- Recorded at {time.strftime('%H:%M:%S')} ---\n"
             )
             insert_to_editor("\n".join(recorded_commands) + "\n")
 

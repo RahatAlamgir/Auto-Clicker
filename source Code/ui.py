@@ -5,7 +5,7 @@ import os
 import time
 import re
 import ctypes
-import webbrowser
+
 import keyboard
 import pyautogui
 
@@ -13,6 +13,7 @@ import guide
 import aboutDev
 import engine
 import recorder
+from pynput import mouse
 
 import sys
 
@@ -53,6 +54,8 @@ config_var = None
 config_dropdown = None
 delete_btn = None
 line_numbers = None
+
+
 
 # ---------- LOG ----------
 def log(msg, tag="info"):
@@ -147,6 +150,49 @@ def toggle_overlay(show):
         if overlay_window:
             overlay_window.destroy()
             overlay_window = None
+
+# --------- color picker ---------------
+
+def pick_color( log):
+    def worker():
+        if log:
+            log("🎯 Click anywhere to pick color...", "warning")
+        else:
+            print("Click anywhere to pick color...")
+
+        time.sleep(0.7)
+
+        def on_click(x, y, button, pressed):
+            if pressed:
+                try:
+                    r, g, b = pyautogui.pixel(x, y)
+                    hex_color = "#{:02x}{:02x}{:02x}".format(r, g, b)
+
+                    cmd = f"wait color {x} {y} {hex_color} tolerance 10"
+
+                    rec_insert_and_refresh(cmd + "\n")
+                    # if insert_to_editor:
+                    #     insert_to_editor(cmd + "\n")
+                    # else:
+                    #     print(cmd)
+
+                    if log:
+                        log(f"Picked color at ({x},{y}) {hex_color}", "success")
+                    else:
+                        print(f"Picked color at ({x},{y}) {hex_color}")
+
+                except Exception as e:
+                    if log:
+                        log(f"Color pick error: {e}", "error")
+                    else:
+                        print(f"Color pick error: {e}")
+
+                return False
+
+        with mouse.Listener(on_click=on_click) as listener:
+            listener.join()
+
+    threading.Thread(target=worker, daemon=True).start()
 # ---------- RUN ----------
 def stop_ui_state():
     engine.running = False
@@ -295,9 +341,10 @@ KEYWORDS = [
     "wait", "random_wait", "loop",
     "tap", "press", "end",
     "click", "dclick", "move", "scroll",
-    "mouse", "text", "drag"
+    "mouse", "text", "drag" ,"hotkey" , "skip" , "color" ,"center" , "find" , "tolerance"
 ]
 
+MODIFIERS = ["ctrl", "shift", "alt", "win"]
 
 def highlight_syntax(event=None):
     editor.after(1, _highlight)
@@ -306,19 +353,22 @@ def highlight_syntax(event=None):
 def _highlight():
     content = editor.get("1.0", tk.END)
 
-    for tag in ["keyword", "number", "comment"]:
+    for tag in ["keyword", "number", "comment", "modifier"]:
         editor.tag_remove(tag, "1.0", tk.END)
 
-    for match in re.finditer(r"#.*", content):
+    # ---------- COMMENTS ----------
+    for match in re.finditer(r"//.*?//", content):
         start = f"1.0 + {match.start()} chars"
         end = f"1.0 + {match.end()} chars"
         editor.tag_add("comment", start, end)
 
+    # ---------- NUMBERS ----------
     for match in re.finditer(r"\b\d+(\.\d+)?(ms|s|m)?\b", content.lower()):
         start = f"1.0 + {match.start()} chars"
         end = f"1.0 + {match.end()} chars"
         editor.tag_add("number", start, end)
 
+    # ---------- KEYWORDS ----------
     for kw in KEYWORDS:
         for match in re.finditer(rf"\b{kw}\b", content.lower()):
             start_index = f"1.0 + {match.start()} chars"
@@ -327,6 +377,17 @@ def _highlight():
             end_index = f"1.0 + {match.end()} chars"
             editor.tag_add("keyword", start_index, end_index)
 
+    # ---------- MODIFIERS (NEW) ----------
+    for mod in MODIFIERS:
+        for match in re.finditer(rf"\b{mod}\b", content.lower()):
+            start_index = f"1.0 + {match.start()} chars"
+
+            # skip if inside comment
+            if "comment" in editor.tag_names(start_index):
+                continue
+
+            end_index = f"1.0 + {match.end()} chars"
+            editor.tag_add("modifier", start_index, end_index)
 
 # ---------- LINE NUMBERS ----------
 def update_line_numbers(event=None):
@@ -422,7 +483,7 @@ def start_app():
     delete_btn = tk.Button(sidebar, text="🗑️ Delete Script", bg="#e74c3c", fg="white",
                            command=delete_config, **btn_style)
 
-    
+    tk.Button(sidebar, text="🎯 Pick Color",  bg="#D6CB30", fg="black",command=lambda: pick_color( log), **btn_style).pack(fill="x", padx=20, pady=10)
     tk.Checkbutton(
         sidebar, text="Show Overlay", 
         variable=overlay_var,
@@ -499,6 +560,7 @@ def start_app():
     editor.tag_configure("keyword", foreground="#4FC3F7")
     editor.tag_configure("number", foreground="#FFD54F")
     editor.tag_configure("comment", foreground="#6A9955")
+    editor.tag_configure("modifier", foreground="#FF8A8A")
 
     editor.tag_configure("current_line", background="#2a2a2a")
 
