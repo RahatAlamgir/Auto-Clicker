@@ -95,14 +95,28 @@ def execute_command(cmd, log):
             keys = parts[1:]
             pyautogui.hotkey(*keys)
 
+        elif cmd_type == "jump":
+            if len(parts) < 2:
+                log("Syntax error. jump needs a value", "error")
+                return
+
+            try:
+                value = int(parts[1])
+                return ("jump", value)
+            except:
+                log("Invalid jump value", "error")
+                return
+
         elif cmd_type == "wait" and len(parts) >= 3 and parts[1].lower() == "color":
 
             # ---------- DEFAULTS ----------
             x, y = None, None
-            target_color = None
+            colors = []
             tolerance = 0
             timeout = 10  # seconds
-            skip_lines = 0
+            threshold = 1
+            area = 1
+            jlines = 0
 
             i = 2
 
@@ -116,15 +130,15 @@ def execute_command(cmd, log):
                 y = int(parts[i + 1])
                 i += 2
 
-            # ---------- COLOR ----------
-            target_color = parts[i].lower()
+            # ---------- COLORS ----------
+            raw_colors = parts[i].split(",")
             i += 1
 
             def hex_to_rgb(h):
                 h = h.lstrip("#")
                 return tuple(int(h[j:j+2], 16) for j in (0, 2, 4))
 
-            target_rgb = hex_to_rgb(target_color)
+            colors = [hex_to_rgb(c.lower()) for c in raw_colors]
 
             # ---------- OPTIONAL PARAMS ----------
             while i < len(parts):
@@ -134,37 +148,147 @@ def execute_command(cmd, log):
                     tolerance = int(parts[i + 1])
                     i += 2
 
-                elif p == "skip":
-                    skip_lines = int(parts[i + 1])
+                elif p == "area":
+                    area = int(parts[i + 1])
+                    i += 2
+                elif p == "threshold":
+                    threshold = int(parts[i + 1])
+                    i += 2
+
+                elif p == "jump":
+                    jlines = int(parts[i + 1])
+                    i += 2
+
+                elif p == "time":
+                    timeout = parse_time_to_ms(parts[i + 1]) / 1000
                     i += 2
 
                 else:
-                    # assume time
+                    # fallback (time without keyword)
                     timeout = parse_time_to_ms(p) / 1000
                     i += 1
+
+            # ---------- AREA SETUP ----------
+            radius = area // 2
+            screen_w, screen_h = pyautogui.size()
 
             # ---------- WAIT LOOP ----------
             start_time = time.time()
             found = False
 
             while running and (time.time() - start_time < timeout):
-                current = pyautogui.pixel(x, y)
 
-                if all(abs(current[j] - target_rgb[j]) <= tolerance for j in range(3)):
-                    found = True
+                match_count = 0
+
+                for dx in range(-radius, radius + 1):
+                    for dy in range(-radius, radius + 1):
+
+                        px = x + dx
+                        py = y + dy
+
+                        if px < 0 or py < 0 or px >= screen_w or py >= screen_h:
+                            continue
+
+                        current = pyautogui.pixel(px, py)
+
+                        for target in colors:
+                            if all(abs(current[j] - target[j]) <= tolerance for j in range(3)):
+                                match_count += 1
+                                # found = True
+                                break
+
+                        if match_count >= threshold:
+                            found = True
+                            break
+
+                    if found:
+                        break
+
+                if found:
                     break
 
                 time.sleep(0.05)
 
             # ---------- RESULT ----------
             if found:
-                log(f"Color matched at ({x},{y})", "success")
+                log(f"Color matched in area at ({x},{y})", "success")
 
-                if skip_lines > 0:
-                    return ("skip", skip_lines)
+                if jlines > 0:
+                    return ("jump", jlines)
 
             else:
                 log(f"Color not found within {timeout}s", "error")
+
+        # elif cmd_type == "wait" and len(parts) >= 3 and parts[1].lower() == "color":
+
+        #     # ---------- DEFAULTS ----------
+        #     x, y = None, None
+        #     target_color = None
+        #     tolerance = 0
+        #     timeout = 10  # seconds
+        #     skip_lines = 0
+
+        #     i = 2
+
+        #     # ---------- POSITION ----------
+        #     if parts[i].lower() == "center":
+        #         screen_w, screen_h = pyautogui.size()
+        #         x, y = screen_w // 2, screen_h // 2
+        #         i += 1
+        #     else:
+        #         x = int(parts[i])
+        #         y = int(parts[i + 1])
+        #         i += 2
+
+        #     # ---------- COLOR ----------
+        #     target_color = parts[i].lower()
+        #     i += 1
+
+        #     def hex_to_rgb(h):
+        #         h = h.lstrip("#")
+        #         return tuple(int(h[j:j+2], 16) for j in (0, 2, 4))
+
+        #     target_rgb = hex_to_rgb(target_color)
+
+        #     # ---------- OPTIONAL PARAMS ----------
+        #     while i < len(parts):
+        #         p = parts[i].lower()
+
+        #         if p == "tolerance":
+        #             tolerance = int(parts[i + 1])
+        #             i += 2
+
+        #         elif p == "skip":
+        #             skip_lines = int(parts[i + 1])
+        #             i += 2
+
+        #         else:
+        #             # assume time
+        #             timeout = parse_time_to_ms(p) / 1000
+        #             i += 1
+
+        #     # ---------- WAIT LOOP ----------
+        #     start_time = time.time()
+        #     found = False
+
+        #     while running and (time.time() - start_time < timeout):
+        #         current = pyautogui.pixel(x, y)
+
+        #         if all(abs(current[j] - target_rgb[j]) <= tolerance for j in range(3)):
+        #             found = True
+        #             break
+
+        #         time.sleep(0.05)
+
+        #     # ---------- RESULT ----------
+        #     if found:
+        #         log(f"Color matched at ({x},{y})", "success")
+
+        #         if skip_lines > 0:
+        #             return ("skip", skip_lines)
+
+        #     else:
+        #         log(f"Color not found within {timeout}s", "error")
 
         elif cmd_type == "wait":
             if len(parts) < 2:
@@ -294,14 +418,37 @@ def run_script(commands, log, on_finish):
 
             result = execute_command(clean_cmds[i], log)
 
-            if isinstance(result, tuple) and result[0] == "skip":
-                skip_n = result[1]
-                skipped = 0
+            # ---------- JUMP HANDLING ----------
+            if isinstance(result, tuple) and result[0] == "jump":
+                jump_val = result[1]
 
-                while skipped < skip_n and i + 1 < len(clean_cmds):
-                    i += 1
-                    if clean_cmds[i].strip() and not clean_cmds[i].strip().startswith("//"):
-                        skipped += 1
+                direction = 1 if jump_val > 0 else -1
+                steps_needed = abs(jump_val)
+                steps_done = 0
+
+                while steps_done < steps_needed:
+                    i += direction
+
+                    # out of bounds → stop execution
+                    if i < 0 or i >= len(clean_cmds):
+                        return
+
+                    line = clean_cmds[i].strip()
+
+                    # skip comments & empty lines
+                    if line and not line.startswith("//"):
+                        steps_done += 1
+
+                continue  # 🔥 prevent i += 1
+
+            # if isinstance(result, tuple) and result[0] == "skip":
+            #     skip_n = result[1]
+            #     skipped = 0
+
+            #     while skipped < skip_n and i + 1 < len(clean_cmds):
+            #         i += 1
+            #         if clean_cmds[i].strip() and not clean_cmds[i].strip().startswith("//"):
+            #             skipped += 1
             i += 1
 
     if loop_count == -1:

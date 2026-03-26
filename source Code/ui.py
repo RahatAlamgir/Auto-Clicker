@@ -151,48 +151,101 @@ def toggle_overlay(show):
             overlay_window.destroy()
             overlay_window = None
 
-# --------- color picker ---------------
+# --------- picker ---------------
 
-def pick_color( log):
+def create_picker_overlay():
+    overlay = tk.Toplevel()
+    overlay.attributes("-fullscreen", True)
+    overlay.attributes("-topmost", True)
+    overlay.attributes("-alpha", 0.01)  # almost invisible
+    overlay.config(cursor="crosshair")  # 👈 cursor change
+
+    # Block all interactions
+    overlay.bind("<Button-1>", lambda e: None)
+
+    return overlay
+
+def pick_color(log):
     def worker():
-        if log:
-            log("🎯 Click anywhere to pick color...", "warning")
-        else:
-            print("Click anywhere to pick color...")
-
-        time.sleep(0.7)
+        # 1. Hide the main UI
+        root.after(0, root.withdraw)
+        
+        # 2. Create overlay on the main thread and store reference
+        overlay_ref = []
+            
+        root.after(0, overlay_ref.append(create_picker_overlay()))
+        time.sleep(0.5)
 
         def on_click(x, y, button, pressed):
             if pressed:
                 try:
                     r, g, b = pyautogui.pixel(x, y)
                     hex_color = "#{:02x}{:02x}{:02x}".format(r, g, b)
-
-                    cmd = f"wait color {x} {y} {hex_color} tolerance 10"
-
-                    rec_insert_and_refresh(cmd + "\n")
-                    # if insert_to_editor:
-                    #     insert_to_editor(cmd + "\n")
-                    # else:
-                    #     print(cmd)
+                    
+                    # Insert result safely
+                    editor.after(0, lambda: insert_picker(hex_color + " "))
 
                     if log:
-                        log(f"Picked color at ({x},{y}) {hex_color}", "success")
-                    else:
-                        print(f"Picked color at ({x},{y}) {hex_color}")
+                        log(f"Picked color at ({x},{y}) {hex_color}", "info")
 
                 except Exception as e:
                     if log:
                         log(f"Color pick error: {e}", "error")
-                    else:
-                        print(f"Color pick error: {e}")
 
-                return False
+                # 3. Restore UI safely
+                def restore():
+                    if overlay_ref:
+                        overlay_ref[0].destroy()
+                    root.deiconify()
+                    root.focus_force()
+
+                root.after(0, restore)
+                return False # Stop the listener
 
         with mouse.Listener(on_click=on_click) as listener:
             listener.join()
 
     threading.Thread(target=worker, daemon=True).start()
+
+def pick_position(log):
+    def worker():
+
+        root.after(0, root.withdraw)
+
+        overlay_container = []
+
+        root.after(0, overlay_container.append(create_picker_overlay()))
+
+        time.sleep(0.5)
+
+        def on_click(x, y, button, pressed):
+            if pressed:
+                try:
+                    cmd = f"{x} {y} "
+                    editor.after(0, lambda: insert_picker(cmd))
+
+                    if log:
+                        log(f"Picked position ({x},{y})", "info")
+
+                except Exception as e:
+                    if log:
+                        log(f"Position pick error: {e}", "error")
+
+                def restore():
+                    if overlay_container:
+                        overlay_container[0].destroy()
+                    root.deiconify()
+                    root.focus_force() 
+
+                root.after(0, restore)
+                return False  
+
+        with mouse.Listener(on_click=on_click) as listener:
+            listener.join()
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
 # ---------- RUN ----------
 def stop_ui_state():
     engine.running = False
@@ -218,12 +271,12 @@ def toggle_run():
             return
 
         engine.running = True
-        update_ui_status() # This will now trigger your animated overlay
+        update_ui_status() # This will now trigger animated overlay
 
         threading.Thread(target=worker, args=(path,), daemon=True).start()
     else:
         engine.running = False
-        update_ui_status() # This will hide the overlay
+        update_ui_status() 
 
 
 def worker(path):
@@ -338,10 +391,11 @@ def on_dropdown_change(*args):
 
 # ---------- SYNTAX ----------
 KEYWORDS = [
-    "wait", "random_wait", "loop",
+    "wait", "random", "loop", "jump",
     "tap", "press", "end",
     "click", "dclick", "move", "scroll",
-    "mouse", "text", "drag" ,"hotkey" , "skip" , "color" ,"center" , "find" , "tolerance"
+    "mouse", "text", "drag" ,"hotkey" ,
+    "color" ,"center" , "find" , "tolerance" , "area"
 ]
 
 MODIFIERS = ["ctrl", "shift", "alt", "win"]
@@ -429,7 +483,12 @@ def rec_insert_and_refresh(text):
     highlight_syntax()
     update_line_numbers()
     highlight_current_line()
-    
+
+def insert_picker(text):
+    editor.insert(tk.INSERT, text)
+    update_line_numbers()
+    highlight_syntax()
+    highlight_current_line()
 # ---------- START APP ----------
 def start_app():
     global root, editor, log_box, status_label
@@ -442,7 +501,7 @@ def start_app():
 
     root = tk.Tk()
     root.title("Auto Clicker Pro")
-    root.geometry("800x650")
+    root.geometry("1000x650")
     root.configure(bg="#0f0f0f")
 
     change_taskbar_icon("ico/idle.ico")
@@ -454,53 +513,37 @@ def start_app():
     sidebar.pack(side="left", fill="y")
     sidebar.pack_propagate(False)
 
-    status_label = tk.Label(
-        sidebar, text="○ STOPPED",
-        fg="#ff5555", bg="#1a1a1a",
-        font=("Segoe UI", 18, "bold")
-    )
+    status_label = tk.Label(sidebar, text="○ STOPPED", fg="#ff5555", bg="#1a1a1a", font=("Segoe UI", 18, "bold"))
     status_label.pack(pady=30)
 
     config_var = tk.StringVar()
     config_var.trace_add("write", on_dropdown_change)
 
-    config_dropdown = ttk.Combobox(
-        sidebar, textvariable=config_var,
-        values=load_configs()
-    )
+    config_dropdown = ttk.Combobox(sidebar, textvariable=config_var,values=load_configs())
     config_dropdown.pack(pady=5, padx=20, fill="x")
 
     btn_style = {"relief": "flat", "font": ("Segoe UI", 9, "bold"), "cursor": "hand2"}
 
 
-    tk.Button(sidebar, text="➕ New Script", bg="#3498db", fg="white",
-              command=create_new, **btn_style).pack(fill="x", padx=20, pady=2)
-
-    save_btn = tk.Button(sidebar, text="💾 Save / Update", bg="#2ecc71", fg="black",
-                         command=save_config, **btn_style)
+    tk.Button(sidebar, text="➕ New Script", bg="#3498db", fg="white", command=create_new, **btn_style).pack(fill="x", padx=20, pady=2)
+    save_btn = tk.Button(sidebar, text="💾 Save / Update", bg="#2ecc71", fg="black", command=save_config, **btn_style)
     save_btn.pack(fill="x", padx=20, pady=2)
+    delete_btn = tk.Button(sidebar, text="🗑️ Delete Script", bg="#e74c3c", fg="white", command=delete_config, **btn_style)
+    
+    #  ---------------- picker -----------------------
+    tk.Frame(sidebar,bg="#1a1a1a", pady=15).pack(fill="x", padx=0, pady=30)
+    tk.Button(sidebar, text="🎯 Pick Color",  bg="#D6CB30", fg="black",command=lambda: pick_color( log), **btn_style).pack(fill="x", padx=20, pady=2)
+    tk.Button(sidebar,text="📍 Pick Position",bg="#6EC1E4", fg="black",command=lambda: pick_position(log), **btn_style).pack(fill="x", padx=20, pady=2)
 
-    delete_btn = tk.Button(sidebar, text="🗑️ Delete Script", bg="#e74c3c", fg="white",
-                           command=delete_config, **btn_style)
-
-    tk.Button(sidebar, text="🎯 Pick Color",  bg="#D6CB30", fg="black",command=lambda: pick_color( log), **btn_style).pack(fill="x", padx=20, pady=10)
-    tk.Checkbutton(
-        sidebar, text="Show Overlay", 
-        variable=overlay_var,
-        bg="#1a1a1a", fg="white", 
-        selectcolor="#1a1a1a",
-        activebackground="#1a1a1a",
-        font=("Segoe UI", 9)
-    ).pack(pady=5)
+    tk.Checkbutton(sidebar, text="Show Overlay", variable=overlay_var, bg="#1a1a1a", fg="white", selectcolor="#1a1a1a", activebackground="#1a1a1a", font=("Segoe UI", 9)).pack(pady=5)
     
     user_info = tk.Frame(sidebar, bg="#1a1a1a", pady=15); user_info.pack(side="bottom", fill="x", padx=0, pady=15)
-    tk.Button(user_info, text="❓ How to Script", bg="#D6CB30", fg="black",
-              command=lambda: guide.show_guide(root), **btn_style).pack(fill="x", padx=20, pady=(20, 2))
 
-    tk.Button(user_info, text="👤 About Developer", bg="#9b59b6", fg="white",
-              command=lambda: aboutDev.show_about(root), **btn_style).pack(fill="x", padx=20, pady=2)
+    tk.Button(user_info, text="❓ How to Script", bg="#D6CB30", fg="black", command=lambda: guide.show_guide(root), **btn_style).pack(fill="x", padx=20, pady=(20, 2))
+    tk.Button(user_info, text="👤 About Developer", bg="#9b59b6", fg="white", command=lambda: aboutDev.show_about(root), **btn_style).pack(fill="x", padx=20, pady=2)
     
     info_box = tk.Frame(sidebar, bg="#111", pady=15); info_box.pack(side="bottom", fill="x", padx=15, pady=20)
+
     tk.Label(info_box, text="F6: RUN / STOP", fg="#00ff88", bg="#111", font=("Segoe UI", 10, "bold")).pack()
     tk.Label(info_box, text="F7: REC / STOP", fg="#f39c12", bg="#111", font=("Segoe UI", 10, "bold")).pack()
 
@@ -514,41 +557,20 @@ def start_app():
     scrollbar = tk.Scrollbar(editor_frame)
     scrollbar.pack(side="right", fill="y")
 
-    line_numbers = tk.Text(
-        editor_frame, width=4,
-        bg="#111", fg="#888",
-        font=("Consolas", 12),
-        relief="flat", state="disabled",
-        padx=5, pady=15
-    )
+    line_numbers = tk.Text( editor_frame, width=4,bg="#111", fg="#888", font=("Consolas", 12),relief="flat", state="disabled",padx=5, pady=15)
     line_numbers.pack(side="left", fill="y")
 
     def on_editor_scroll(*args):
         scrollbar.set(*args)
         line_numbers.yview_moveto(args[0])
 
-    editor = tk.Text(
-        editor_frame,
-        bg="#1e1e1e", fg="#d4d4d4",
-        insertbackground="white",
-        font=("Consolas", 12),
-        relief="flat",
-        padx=15, pady=15,
-        
-        yscrollcommand=on_editor_scroll
-    )
+    editor = tk.Text(editor_frame, bg="#1e1e1e", fg="#d4d4d4", insertbackground="white", font=("Consolas", 12), relief="flat", padx=15, pady=15,yscrollcommand=on_editor_scroll)
     editor.pack(side="left", fill="both", expand=True)
 
     scrollbar.config(command=on_scroll)
 
     # Log box
-    log_box = tk.Text(
-        main, height=8,
-        bg="#000", fg="white",
-        font=("Consolas", 10),
-        relief="flat",
-        padx=15, pady=15
-    )
+    log_box = tk.Text( main, height=8,bg="#000", fg="white", font=("Consolas", 10), relief="flat", padx=15, pady=15)
     log_box.pack(fill="x", pady=(20, 0))
 
     log_box.tag_configure("info", foreground="#00ff88")
@@ -577,7 +599,6 @@ def start_app():
     keyboard.add_hotkey('f7', recorder.toggle_record)
 
     recorder.set_ui_callbacks(safe_log, rec_insert_and_refresh, update_ui_status ,save_config)
-
     recorder.start_listeners()
 
     update_line_numbers()

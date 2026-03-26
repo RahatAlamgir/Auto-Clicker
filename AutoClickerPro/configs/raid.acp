@@ -1,13 +1,18 @@
+// wait color 989 489 #41f384 tolerance 25 10s //
+
+wait color center #b0fdce,#83f6ae,#1add64,#43f385 area 5 tolerance 20 9m
+
+wait 35s
 tap 3
 
-random_wait 100_200
+wait random 100 200
 
 press mouse right
 wait 1700
 end mouse right
 
-random_wait 100_200
+wait random 100 200
 tap 2
-wait 360000
+
 
 loop -1

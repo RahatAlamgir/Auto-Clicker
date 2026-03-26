@@ -4,7 +4,7 @@ import tkinter as tk
 def show_guide(parent):
     guide_win = tk.Toplevel(parent)
     guide_win.title("Guide")
-    guide_win.geometry("500x600")
+    guide_win.geometry("700x600")
     guide_win.configure(bg="#1a1a1a")
 
     help_text = """
@@ -12,6 +12,7 @@ MACRO COMMAND LIST
 ---------------------------------
 
 loop [n]            : Repeat script n times (-1 = infinite)
+jump [n]            : jump lines (-n go back , n skip)
 hotkey [sequence]   : [ctrl c, ctrl v , win r , alt shift tab] etc
 text [message]      : any line want to type. 
                     : exmple : text hellow WORLD
@@ -25,13 +26,14 @@ wait [time] : Wait time supports: ms , s, m
 
 wait random [a] [b] : Random delay between a and b
 
-wait [condition] [tolerance] [skip] [timeout]
+wait [color condition] [area] [tolerance] [threshold] [jump] [timeout]
 example : wait color 500 500 #ffffff
         : wait color 500 500 #ffffff 5s
-        : wait color center #ffffff
         : wait color center #ffffff tolerance 10
-        : wait color center #ffffff tolerance 10 10s
-        : wait color center #ffffff tolerance 10 skip 2 10s
+        : wait color center #ffffff tolerance 10 time 10s
+        : wait color center #ffffff tolerance 10 jump 2 10s
+        : wait color center #272727,#ee0000,#dd1111 area 5 tolerance 10 10s
+        : wait color 500 300 #ff0000,#ee0000 area 5 tolerance 15 threshold 10 5m
 
 ---------------- Keyboard ----------------
 
